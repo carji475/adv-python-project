@@ -1,5 +1,4 @@
 import numpy as np
-from numpy import zeros
 
 # covariance function object
 class covfunc():
@@ -75,24 +74,50 @@ class gp_strain(object):
 
     """
 
-    def __init__(self, obs, y, pred, m_1, m_2, Lx, Ly, nrSegs, sigma_f, l, sigma_n, v, covfunc=covfunc()):
+    def __init__(self, obs, y, pred, mx, my, Lx, Ly, nrSegs, sigma_f, l, sigma_n, v, covfunc=covfunc()):
         super(gp_strain, self).__init__()
         # TODO: initialise all variables
+        self.obs = obs
+        self.y = y
+        self.pred = pred
+        self.mperms = get_mperms(mx, my)
+        self.Lx = Lx
+        self.Ly = Ly
+        self.nrSegs = nrSegs
+        self.sigma_f = sigma_f
+        self.l = l
+        self.sigma_n = sigma_n
+        self.v = v
+        self.covfunc = covfunc
 
-        def get_basnrs():
-            # basis functions
 
-        def build_phi():
+        def get_mperms(self, mx, my):
+            """Returns basis function indices
+
+            Parameters
+            ----------
+            mx, my : ints
+                number of basis functions in x/y-directions
+
+            Returns
+            -------
+            mperms : int
+                (mx*my,2) array with all permutations: (1,1), (1,2), ..., (mx,my)
+                that lie inside the ellipse mm1.^2/m_1^2+mm2.^2/m_2^2=1
+            """
+            mX, mY = np.meshgrid(np.arange(1,mx+1), np.arange(1,my+1))
+            insideEllipse = np.where( mX**2/mx**2 + mY**2/my**2 <= 1 )[0]
+            return np.stack((mX.reshape(-1)[insideEllipse], mY.reshape(-1)[insideEllipse]),axis=1)
+
+
+#       def build_phi():
             # calling c-function
 
-        def optimiseML():
+#        def optimiseML():
             # selecting hyperpars by minimising nll
 
-        def nll():
+#        def nll():
             # optimisation cost function
-
-
-
 
 
 
