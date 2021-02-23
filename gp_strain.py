@@ -80,7 +80,7 @@ class gp_strain(object):
         self.obs = obs
         self.y = y
         self.pred = pred
-        self.mperms = get_mperms(mx, my)
+        self.mperms = self.get_mperms(mx, my)
         self.Lx = Lx
         self.Ly = Ly
         self.nrSegs = nrSegs
