@@ -141,7 +141,7 @@ class gp_strain(object):
         self.obs = obs
         self.y = y
         self.pred = pred
-        self.mperms = np.fliplr(get_mperms(mx, my).astype(np.int32))
+        self.mperms = get_mperms(mx, my).astype(np.int32)
         self.m = self.mperms.shape[0]
         self.Lx = Lx
         self.Ly = Ly

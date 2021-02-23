@@ -30,7 +30,7 @@ Y = r*np.sin(theta*np.pi/180)
 nx = X.shape[1]
 ny = X.shape[0]
 
-pred = np.stack((X.flatten(), Y.flatten()), axis=1)
+pred = np.stack((X.flatten(), Y.flatten()), axis=1) # test points
 
 # expand domain
 Lx = Cx*r2
