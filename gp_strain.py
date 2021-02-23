@@ -2,6 +2,7 @@ import numpy as np
 from ctypes import *
 from numpy.ctypeslib import ndpointer
 
+
 class covfunc():
     """
     Class representing the covariance function
@@ -44,8 +45,8 @@ def get_mperms(mx, my):
         that lie inside the ellipse mm1.^2/m_1^2+mm2.^2/m_2^2=1
     """
     mX, mY = np.meshgrid(np.arange(1,mx+1), np.arange(1,my+1))
-    insideEllipse = np.where( mX**2/mx**2 + mY**2/my**2 <= 1 )[0]
-    np.stack( (mX.reshape(-1)[insideEllipse], mY.reshape(-1)[insideEllipse]), axis=1)
+    insideEllipse = np.where( (mX**2/mx**2 + mY**2/my**2 < 1).flatten() )[0]
+    return np.stack( (mX.reshape(-1)[insideEllipse], mY.reshape(-1)[insideEllipse]), axis=1)
 
 
 class gp_strain(object):
@@ -101,7 +102,6 @@ class gp_strain(object):
         (nobs, m) array of basis functions evaluated at measurement inputs
     Phi_pred_T : double
         (npred, m) array of basis functions evaluated at test inputs
-
     """
 
     def __init__(self, obs, y, pred, mx, my, Lx, Ly, nrSegs, sigma_f, l, sigma_n, v, covfunc=covfunc()):
@@ -141,23 +141,23 @@ class gp_strain(object):
         self.obs = obs
         self.y = y
         self.pred = pred
-        self.mperms = get_mperms(mx, my)
+        self.mperms = np.fliplr(get_mperms(mx, my).astype(np.int32))
         self.m = self.mperms.shape[0]
         self.Lx = Lx
         self.Ly = Ly
-        self.nrSegs = nrSegs
+        self.nrSegs = nrSegs.astype(np.int32)
         self.sigma_f = sigma_f
         self.l = l
         self.sigma_n = sigma_n
         self.covfunc = covfunc
 
-        self.addPrevSegs = np.concatenate((np.zeros(1), np.cumsum(nrSegs[:-1:]-1))).astype(int)
+        self.addPrevSegs = np.concatenate((np.zeros(1), np.cumsum(nrSegs[:-1:]-1))).astype(np.int32)
         self.A = 1 + (1-v)/v
         self.B = - (self.A + 1)
         self.nobs = self.y.size
         self.npred = self.pred.shape[0]
         self.Phi = np.zeros((self.nobs, self.m))
-        self.Phi_pred_T = np.zeros((self.npred, self.m))
+        self.Phi_pred_T = np.zeros((3*self.npred, self.m))
         self.build_phi() # fill the Phi-matrices
 
 
@@ -168,20 +168,14 @@ class gp_strain(object):
         """
         cBN = CDLL('./build_phi.so')
         cBN.build_phi.restype = None
-        cBN.build_phi.argtypes = [c_int, c_int, c_int,
-                                  ndpointer(c_double, flags='C_CONTIGUOUS'),
-                                  ndpointer(c_double, flags='C_CONTIGUOUS'),
-                                  ndpointer(c_double, flags='C_CONTIGUOUS'),
-                                  ndpointer(c_double, flags='C_CONTIGUOUS'),
+        cBN.build_phi.argtypes = [c_int, c_int, c_int, ndpointer(c_int),
+                                  ndpointer(c_double), ndpointer(c_double),
                                   c_double, c_double, c_double, c_double,
-                                  ndpointer(c_int, flags='C_CONTIGUOUS'),
-                                  ndpointer(c_int, flags='C_CONTIGUOUS'),
-                                  ndpointer(c_double, flags='C_CONTIGUOUS'),
-                                  ndpointer(c_double, flags='C_CONTIGUOUS')]
+                                  ndpointer(c_int), ndpointer(c_int),
+                                  ndpointer(c_double), ndpointer(c_double)]
         cBN.build_phi(self.nobs, self.npred, self.m, self.mperms,
-                      self.obs, self.pred[:,0], self.pred[:,1], self.Lx,
-                      self.Ly, self.A, self.B, self.nrSegs, self.addPrevSegs,
-                      self.Phi, self.Phi_pred)
+                      self.obs, self.pred, self.Lx, self.Ly, self.A, self.B,
+                      self.nrSegs, self.addPrevSegs, self.Phi, self.Phi_pred_T)
 
 #        def optimiseML():
             # selecting hyperpars by minimising nll
