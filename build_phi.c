@@ -1,6 +1,6 @@
 /*==========================================================
  *
- * construct Phi and predPhi^T for the attenuated case using this function
+ * construct Phi and predPhi^T
  *
  * Compile as below
  *
