@@ -146,9 +146,9 @@ class gp_strain(object):
         self.Lx = Lx
         self.Ly = Ly
         self.nrSegs = nrSegs.astype(np.int32)
-        self.sigma_f = sigma_f
-        self.l = l
-        self.sigma_n = sigma_n
+        self.sigma_f = np.log(sigma_f)
+        self.l = np.log(l)
+        self.sigma_n = np.log(sigma_n)
         self.covfunc = covfunc
 
         self.addPrevSegs = np.concatenate((np.zeros(1), np.cumsum(nrSegs[:-1:]-1))).astype(np.int32)
@@ -176,6 +176,38 @@ class gp_strain(object):
         cBN.build_phi(self.nobs, self.npred, self.m, self.mperms,
                       self.obs, self.pred, self.Lx, self.Ly, self.A, self.B,
                       self.nrSegs, self.addPrevSegs, self.Phi, self.Phi_pred_T)
+
+    def predict(self):
+        """Computing the prediction mean and standard deviation
+
+        Returns
+        -------
+        means : float
+            tuple containing the mean components
+        stds :
+            tuple containing the standard deviations
+        """
+        lambdam = self.getlambda()
+        expsn = np.exp(self.sigma_n)
+        mean = self.Phi_pred_T@np.linalg.solve( self.Phi.T@self.Phi + np.diag(expsn/lambdam), self.Phi.T@self.y )
+        std = expsn*np.sqrt(np.sum(self.Phi_pred_T*np.linalg.solve( self.Phi.T@self.Phi + np.diag(expsn/lambdam), self.Phi_pred_T.T ).T, 1))
+        return (mean[::3], mean[1::3], mean[2::3]), (std[::3], std[1::3], std[2::3])
+
+    def getlambda(self):
+        """Computing the diagonal of the Lambda matrix (spectral values)
+
+        Returns
+        -------
+        lambda : float
+            (m,) array with spectral values
+        """
+        omega =  self.mperms*0.5*np.pi / np.array([[self.Lx, self.Ly]])
+        expl = np.exp(self.l)
+        expsf = np.exp(self.sigma_f)
+        if self.covfunc.covtype=='matern':
+            return expsf * np.power( 2*self.covfunc.nu / expl + np.sum(omega**2,1), -(self.covfunc.nu+1) ) / np.power(expl,self.covfunc.nu)
+        if self.covfunc.covtype=='se':
+            return expsf * expl * np.exp( -0.5*expl + np.sum(omega**2,1) )
 
 #        def optimiseML():
             # selecting hyperpars by minimising nll
