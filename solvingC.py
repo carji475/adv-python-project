@@ -2,6 +2,7 @@ import numpy as np
 from scipy.io import loadmat
 import gp_strain
 
+
 data = loadmat('./data/JPARC_processed.mat')
 y = data['y_meas'].astype(np.float64).flatten()
 obs = np.ascontiguousarray(data['obs'].astype(np.float64))
@@ -37,18 +38,24 @@ Lx = Cx*r2
 Ly = Cy*r2
 
 # hyperparameters (start guesses)
-sigma_f = 20.0
-l = 8
-sigma_n = 1e-4
+sigma_f = 1.0
+l = 1.0
+sigma_n = 1.0
 
 # create a strain object
 strain_object = gp_strain.gp_strain(obs, y, pred, mx, my, Lx, Ly, nrSegs, sigma_f, l, sigma_n, v)
 
+# optimise
+strain_object.optimise_ml()
+
+# predict
 eps_est, std_est = strain_object.predict()
 
 
 ## plotting
 def plot_boundary(ax):
+    """Plotting the boundary of the C-shape
+    """
     linecol = 'black'
     linewidth = 1.0
     theta = np.linspace(np.pi/4,7*np.pi/4,1000)
@@ -64,20 +71,26 @@ import cmocean
 import matplotlib.pyplot as plt
 from scipy.interpolate import LinearNDInterpolator
 from scipy.io import loadmat
-fea_data = loadmat('./data/JPARC_fea.mat')
+fea_data = loadmat('./data/JPARC_fea.mat') # finite element solutions
 fea_xx = LinearNDInterpolator(fea_data['pxx'], fea_data['vxx'])
 fea_xy = LinearNDInterpolator(fea_data['pxy'], fea_data['vxy'])
 fea_yy = LinearNDInterpolator(fea_data['pyy'], fea_data['vyy'])
 feas = [fea_xx, fea_xy, fea_yy]
 
+# caxis settings
 vmin_eps = -1e-3
 vmax_eps = 1e-3
 vmin_std = 1e-5
 vmax_std = 1e-4
+
+# select colormap and shading
 cmap = cmocean.cm.balance
 shading = 'auto'
+
+# strain component title names
 eps_names = [r'$\epsilon_{xx}$', r'$\epsilon_{xy}$', r'$\epsilon_{yy}$']
 
+# create figure and add plots
 fig = plt.figure(figsize=(10,10))
 figind=1
 for qq in range(3):
@@ -104,10 +117,16 @@ for qq in range(3):
     ax.axis('off')
 
 
+# add colorbars
 plt.subplots_adjust(left=0.05, top=0.95, bottom=0.01, right=0.8)
 cax_eps = plt.axes([0.85, 0.35, 0.075, 0.58])
 cbar_eps = plt.colorbar(ax_eps, cax=cax_eps)
 cbar_eps.set_ticks(np.arange(vmin_eps,vmax_eps+1e-4,5e-4) )
-cax_std = plt.axes([0.85, 0.02, 0.075, 0.22])
+cax_std = plt.axes([0.85, 0.02, 0.075, 0.24])
 cbar_std = plt.colorbar(ax_std, cax=cax_std)
 cbar_std.set_ticks(np.arange(0,vmax_std+1e-5,25e-6) )
+
+plt.show()
+
+## save plot
+fig.savefig('strain_plot.png', format='png', bbox_inches='tight')

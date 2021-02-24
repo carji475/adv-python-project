@@ -1,6 +1,8 @@
 import numpy as np
-import jax.scipy.linalg as scl
+from scipy.optimize import minimize
+import jax.scipy.linalg as jscl
 import jax.numpy as jnp
+from jax import jit, grad
 from jax.config import config
 config.update('jax_enable_x64', True)  # double precision
 from ctypes import *
@@ -193,8 +195,8 @@ class gp_strain(object):
         """
         lambdam = self.getlambda(np.exp(np.array([self.sigma_f,self.l])))
         expsn = np.exp(self.sigma_n)
-        mean = self.Phi_pred_T@scl.solve( self.Phi.T@self.Phi + np.diag(expsn/lambdam), self.Phi.T@self.y )
-        std = expsn*np.sqrt(np.sum(self.Phi_pred_T*scl.solve( self.Phi.T@self.Phi + np.diag(expsn/lambdam), self.Phi_pred_T.T ).T, 1))
+        mean = self.Phi_pred_T@jscl.solve( self.Phi.T@self.Phi + np.diag(expsn/lambdam), self.Phi.T@self.y )
+        std = expsn*np.sqrt(np.sum(self.Phi_pred_T*jscl.solve( self.Phi.T@self.Phi + np.diag(expsn/lambdam), self.Phi_pred_T.T ).T, 1))
         return (mean[::3], mean[1::3], mean[2::3]), (std[::3], std[1::3], std[2::3])
 
     def getlambda(self, hyperparams):
@@ -216,12 +218,23 @@ class gp_strain(object):
         if self.covfunc.covtype=='se':
             return expsf * expl * jnp.exp( -0.5*expl + jnp.sum(omega**2,1) )
 
-        # def optimiseML(self):
-            # selecting hyperpars by minimising nll
+    def optimise_ml(self):
+        # selecting hyperpars by minimising nll
+        cost_func = jit(self.nll)
+        cost_grad = grad(cost_func)
 
+        def npgradient(theta, *args): # need this wrapper for scipy.optimize.minimize
+            return 0 + np.asarray(cost_grad(theta,*args)) # # adding 0 since 'L-BFGS-B' otherwise complains about contig. problems ...
+
+        x0 = jnp.array([self.sigma_f,self.l,self.sigma_n])
+        res = minimize(cost_func, x0, method = 'L-BFGS-B',options={'disp': True, 'maxiter':10, 'iprint': 1}, jac = npgradient)
+        self.sigma_f = res.x[0]
+        self.l = res.x[1]
+        self.sigma_n =res.x[2]
 
     def nll(self, hyperparams):
-        # optimisation cost function
+        """Negative log likelihood
+        """
         hyperparams_exp = jnp.exp(hyperparams)
         lambdam = self.getlambda( hyperparams_exp )
         expsn = hyperparams_exp[-1]
@@ -230,8 +243,8 @@ class gp_strain(object):
         # Z = 0.5*(Z+Z.T)
         # Z = Z + 2*np.abs(np.min())
 
-        Zchol, low = scl.cho_factor(Z)
-        ZiPhiT = scl.cho_solve((Zchol, low), self.Phi.T)
+        Zchol, low = jscl.cho_factor(Z)
+        ZiPhiT = jscl.cho_solve((Zchol, low), self.Phi.T)
 
         logQ = (self.nobs-self.m)*hyperparams[-1] + 2*jnp.sum(jnp.log(jnp.diag(Zchol))) + jnp.sum(jnp.log(lambdam))
         yTinvQy = 1/expsn * self.y@( self.y -  self.Phi@(ZiPhiT@self.y) )
