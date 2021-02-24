@@ -28,8 +28,8 @@ void build_phi(int n_obs, int n_pred, int n_m, int *basnrs,
         outerInd=n_pred;
     }
 
-//    omp_set_num_threads(omp_get_max_threads()); /* automatically use the maximum number of available threads */
-//    #pragma omp parallel for private(ss,tt,qq,zz)
+    omp_set_num_threads(omp_get_max_threads()); /* automatically use the maximum number of available threads */
+    #pragma omp parallel for private(ss,tt,qq,zz)
     for (ss=0; ss<outerInd; ss++) {
         if (ss<n_obs) {
             int compSegs= addPrevSegments[ss];
