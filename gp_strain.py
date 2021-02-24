@@ -1,4 +1,8 @@
 import numpy as np
+import jax.scipy.linalg as scl
+import jax.numpy as jnp
+from jax.config import config
+config.update('jax_enable_x64', True)  # double precision
 from ctypes import *
 from numpy.ctypeslib import ndpointer
 
@@ -45,7 +49,7 @@ def get_mperms(mx, my):
         that lie inside the ellipse mm1.^2/m_1^2+mm2.^2/m_2^2=1
     """
     mX, mY = np.meshgrid(np.arange(1,mx+1), np.arange(1,my+1))
-    insideEllipse = np.where( (mX**2/mx**2 + mY**2/my**2 < 1).flatten() )[0]
+    insideEllipse = np.where( (mX**2/mx**2 + mY**2/my**2 <= 1).flatten() )[0]
     return np.stack( (mX.reshape(-1)[insideEllipse], mY.reshape(-1)[insideEllipse]), axis=1)
 
 
@@ -187,36 +191,50 @@ class gp_strain(object):
         stds :
             tuple containing the standard deviations
         """
-        lambdam = self.getlambda()
+        lambdam = self.getlambda(np.exp(np.array([self.sigma_f,self.l])))
         expsn = np.exp(self.sigma_n)
-        mean = self.Phi_pred_T@np.linalg.solve( self.Phi.T@self.Phi + np.diag(expsn/lambdam), self.Phi.T@self.y )
-        std = expsn*np.sqrt(np.sum(self.Phi_pred_T*np.linalg.solve( self.Phi.T@self.Phi + np.diag(expsn/lambdam), self.Phi_pred_T.T ).T, 1))
+        mean = self.Phi_pred_T@scl.solve( self.Phi.T@self.Phi + np.diag(expsn/lambdam), self.Phi.T@self.y )
+        std = expsn*np.sqrt(np.sum(self.Phi_pred_T*scl.solve( self.Phi.T@self.Phi + np.diag(expsn/lambdam), self.Phi_pred_T.T ).T, 1))
         return (mean[::3], mean[1::3], mean[2::3]), (std[::3], std[1::3], std[2::3])
 
-    def getlambda(self):
+    def getlambda(self, hyperparams):
         """Computing the diagonal of the Lambda matrix (spectral values)
-
+        Parameters
+        ----------
+        hyperparams : float
+            array with hyperparameters
         Returns
         -------
         lambda : float
             (m,) array with spectral values
         """
-        omega =  self.mperms*0.5*np.pi / np.array([[self.Lx, self.Ly]])
-        expl = np.exp(self.l)
-        expsf = np.exp(self.sigma_f)
+        omega =  self.mperms*0.5*jnp.pi / jnp.array([[self.Lx, self.Ly]])
+        expl = hyperparams[1]
+        expsf = hyperparams[0]
         if self.covfunc.covtype=='matern':
-            return expsf * np.power( 2*self.covfunc.nu / expl + np.sum(omega**2,1), -(self.covfunc.nu+1) ) / np.power(expl,self.covfunc.nu)
+            return expsf * jnp.power( 2*self.covfunc.nu / expl + jnp.sum(omega**2,1), -(self.covfunc.nu+1) ) / jnp.power(expl, self.covfunc.nu)
         if self.covfunc.covtype=='se':
-            return expsf * expl * np.exp( -0.5*expl + np.sum(omega**2,1) )
+            return expsf * expl * jnp.exp( -0.5*expl + jnp.sum(omega**2,1) )
 
-#        def optimiseML():
+        # def optimiseML(self):
             # selecting hyperpars by minimising nll
 
-#        def nll():
-            # optimisation cost function
 
+    def nll(self, hyperparams):
+        # optimisation cost function
+        hyperparams_exp = jnp.exp(hyperparams)
+        lambdam = self.getlambda( hyperparams_exp )
+        expsn = hyperparams_exp[-1]
 
+        Z = self.Phi.T@self.Phi + jnp.diag(expsn/lambdam)
+        # Z = 0.5*(Z+Z.T)
+        # Z = Z + 2*np.abs(np.min())
 
+        Zchol, low = scl.cho_factor(Z)
+        ZiPhiT = scl.cho_solve((Zchol, low), self.Phi.T)
 
+        logQ = (self.nobs-self.m)*hyperparams[-1] + 2*jnp.sum(jnp.log(jnp.diag(Zchol))) + jnp.sum(jnp.log(lambdam))
+        yTinvQy = 1/expsn * self.y@( self.y -  self.Phi@(ZiPhiT@self.y) )
 
+        return logQ + yTinvQy
 
