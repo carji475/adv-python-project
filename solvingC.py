@@ -1,8 +1,11 @@
 import numpy as np
-from scipy.io import loadmat
+from scipy.io import loadmat  # for reading mat-files
 import gp_strain
+import cmocean
+import matplotlib.pyplot as plt
+from scipy.interpolate import LinearNDInterpolator
 
-
+# load data from files
 data = loadmat('./data/JPARC_processed.mat')
 y = data['y_meas'].astype(np.float64).flatten()
 obs = np.ascontiguousarray(data['obs'].astype(np.float64))
@@ -17,21 +20,22 @@ mx = 30
 my = 30
 
 # material parameters
-v = 0.3 # poissons ratio
+v = 0.3  # poissons ratio
 
 # test mesh
 numr = 100
 numtheta = 360
 r1 = 3.5e-3
 r2 = 10e-3
-r, theta = np.meshgrid(np.linspace(r1,r2,numr), np.linspace(45,360-45,numtheta))
-X = r*np.cos(theta*np.pi/180)
-Y = r*np.sin(theta*np.pi/180)
+r, theta = np.meshgrid(np.linspace(r1, r2, numr),
+                       np.linspace(np.pi/4, 7*np.pi/4, numtheta))
+X = r*np.cos(theta)
+Y = r*np.sin(theta)
 
 nx = X.shape[1]
 ny = X.shape[0]
 
-pred = np.stack((X.flatten(), Y.flatten()), axis=1) # test points
+pred = np.stack((X.flatten(), Y.flatten()), axis=1)  # test points
 
 # expand domain
 Lx = Cx*r2
@@ -43,18 +47,23 @@ l = 1.0
 sigma_n = 1.0
 
 # create a strain object
-strain_object = gp_strain.gp_strain(obs, y, pred, mx, my, Lx, Ly, nrSegs, sigma_f, l, sigma_n, v)
+strain_object = gp_strain.gp_strain(obs, y, pred, mx, my, Lx, Ly,
+                                    nrSegs, sigma_f, l, sigma_n, v)
 
-# optimise
+# optimise marginal likelihood
 strain_object.optimise_ml()
 
 # predict
 eps_est, std_est = strain_object.predict()
 
 
-## plotting
 def plot_boundary(ax):
-    """Plotting the boundary of the C-shape
+    """Function for plotting the boundary of the C-shape
+
+    Parameters
+    ----------
+    ax : axis
+        axis object to which the plotting is applied
     """
     linecol = 'black'
     linewidth = 1.0
@@ -67,11 +76,8 @@ def plot_boundary(ax):
             np.sin(theta[-1])*np.array([r1, r2]), color=linecol, linewidth=linewidth)
 
 
-import cmocean
-import matplotlib.pyplot as plt
-from scipy.interpolate import LinearNDInterpolator
-from scipy.io import loadmat
-fea_data = loadmat('./data/JPARC_fea.mat') # finite element solutions
+# finite element solutions -- we use interpolators to evaluate them at the test points
+fea_data = loadmat('./data/JPARC_fea.mat')
 fea_xx = LinearNDInterpolator(fea_data['pxx'], fea_data['vxx'])
 fea_xy = LinearNDInterpolator(fea_data['pxy'], fea_data['vxy'])
 fea_yy = LinearNDInterpolator(fea_data['pyy'], fea_data['vyy'])
@@ -92,27 +98,32 @@ eps_names = [r'$\epsilon_{xx}$', r'$\epsilon_{xy}$', r'$\epsilon_{yy}$']
 
 # create figure and add plots
 fig = plt.figure(figsize=(10,10))
-figind=1
 for qq in range(3):
     ax = fig.add_subplot(3,3, qq+1)
-    ax.pcolormesh(X, Y, 1.15*feas[qq](pred).reshape((ny,nx)), shading=shading, cmap=cmap, vmin=vmin_eps,vmax=vmax_eps)
+    ax.pcolormesh(X, Y, 1.15*feas[qq](pred).reshape((ny,nx)), shading=shading,
+                  cmap=cmap, vmin=vmin_eps,vmax=vmax_eps)
     ax.set_title(eps_names[qq], fontsize=20)
     if qq==0:
-        ax.text(-0.2,0.5,'FEA', fontsize=15, rotation='vertical', va='center', transform=ax.transAxes)
+        ax.text(-0.2,0.5,'FEA', fontsize=15, rotation='vertical',
+                va='center', transform=ax.transAxes)
     plot_boundary(ax)
     ax.axis('off')
 
     ax = fig.add_subplot(3,3, qq+4)
-    ax_eps = ax.pcolormesh(X, Y, eps_est[qq].reshape((ny,nx)), shading=shading, cmap=cmap, vmin=vmin_eps,vmax=vmax_eps)
+    ax_eps = ax.pcolormesh(X, Y, eps_est[qq].reshape((ny,nx)), shading=shading,
+                           cmap=cmap, vmin=vmin_eps,vmax=vmax_eps)
     if qq==0:
-        ax.text(-0.2,0.5,'GP mean', fontsize=15, rotation='vertical', va='center', transform=ax.transAxes)
+        ax.text(-0.2,0.5,'GP mean', fontsize=15, rotation='vertical',
+                va='center', transform=ax.transAxes)
     plot_boundary(ax)
     ax.axis('off')
 
     ax = fig.add_subplot(3,3, qq+7)
-    ax_std = ax.pcolormesh(X, Y, std_est[qq].reshape((ny,nx)), shading=shading, cmap=cmap, vmin=vmin_std,vmax=vmax_std)
+    ax_std = ax.pcolormesh(X, Y, std_est[qq].reshape((ny,nx)), shading=shading,
+                           cmap=cmap, vmin=vmin_std,vmax=vmax_std)
     if qq==0:
-        ax.text(-0.2,0.5,'Predicted std', fontsize=15, rotation='vertical', va='center', transform=ax.transAxes)
+        ax.text(-0.2,0.5,'Predicted std', fontsize=15, rotation='vertical',
+                va='center', transform=ax.transAxes)
     plot_boundary(ax)
     ax.axis('off')
 
@@ -126,7 +137,8 @@ cax_std = plt.axes([0.85, 0.02, 0.075, 0.24])
 cbar_std = plt.colorbar(ax_std, cax=cax_std)
 cbar_std.set_ticks(np.arange(0,vmax_std+1e-5,25e-6) )
 
+# make plot visible
 plt.show()
 
-## save plot
+# save plot
 fig.savefig('strain_plot.png', format='png', bbox_inches='tight')
