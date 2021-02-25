@@ -11,10 +11,6 @@ y = data['y_meas'].astype(np.float64).flatten()
 obs = np.ascontiguousarray(data['obs'].astype(np.float64))
 nrSegs = data['nrSegs'].astype(np.int32).flatten()
 
-# Approximation parameters
-Cx = 2.5
-Cy = 2.5
-
 # number of basis functions
 mx = 30
 my = 30
@@ -38,8 +34,8 @@ ny = X.shape[0]
 pred = np.stack((X.flatten(), Y.flatten()), axis=1)  # test points
 
 # expand domain
-Lx = Cx*r2
-Ly = Cy*r2
+Lx = 2*r2
+Ly = 2*r2
 
 # hyperparameters (start guesses)
 sigma_f = 1.0
@@ -47,8 +43,9 @@ l = 1.0
 sigma_n = 1.0
 
 # create a strain object
-strain_object = gp_strain.gp_strain(obs, y, pred, mx, my, Lx, Ly,
-                                    nrSegs, sigma_f, l, sigma_n, v)
+strain_object = gp_strain.gp_strain(obs, y, pred, mx, my, Lx, Ly, nrSegs,
+                                    sigma_f, l, sigma_n, v,
+                                    covfunc=gp_strain.covfunc(covtype='matern', nu=1.5))
 
 # optimise marginal likelihood
 strain_object.optimise_ml()
