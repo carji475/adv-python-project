@@ -110,6 +110,8 @@ class gp_strain(object):
         (nobs, m) array of basis functions evaluated at measurement inputs
     Phi_pred_T : ndarray
         (npred, m) array of basis functions evaluated at test inputs
+    PhiTPhi : ndarray
+        (m, m) matrix product between Phi.T and Phi, useful to have pre-computed
     """
 
     def __init__(self, obs, y, pred, mx, my, Lx, Ly, nrSegs, sigma_f, l,
@@ -174,6 +176,8 @@ class gp_strain(object):
         # fill the Phi-matrices -- we only need to compute the basis functions once
         self.build_phi()
 
+        # this product is used quite often and is good to have pre-computed
+        self.PhiTPhi = self.Phi.T@self.Phi
 
     def build_phi(self):
         """Building the Phi-matrices. This is done in an external C-function,
@@ -210,9 +214,9 @@ class gp_strain(object):
         """
         lambdam = self.getlambda()
         mean = self.Phi_pred_T@jscl.solve(
-            self.Phi.T@self.Phi + np.diag(self.sigma_n/lambdam), self.Phi.T@self.y )
+            self.PhiTPhi + np.diag(self.sigma_n/lambdam), self.Phi.T@self.y )
         std = np.sqrt(self.sigma_n*np.sum(self.Phi_pred_T*jscl.solve(
-            self.Phi.T@self.Phi + np.diag(self.sigma_n/lambdam), self.Phi_pred_T.T ).T, 1))
+            self.PhiTPhi + np.diag(self.sigma_n/lambdam), self.Phi_pred_T.T ).T, 1))
         return (mean[::3], mean[1::3], mean[2::3]), (std[::3], std[1::3], std[2::3])
 
     def getlambda(self, hyperparams=None):
@@ -308,7 +312,7 @@ class gp_strain(object):
         sn = hyperparams[-1]
 
         # build the pd Z-matrix
-        Z = self.Phi.T@self.Phi + jnp.diag(sn/lambdam)
+        Z = self.PhiTPhi + jnp.diag(sn/lambdam)
 
         # use cholesky for numerical stability
         Zchol, low = jscl.cho_factor(Z)
