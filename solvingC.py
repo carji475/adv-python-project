@@ -34,8 +34,8 @@ ny = X.shape[0]
 pred = np.stack((X.flatten(), Y.flatten()), axis=1)  # test points
 
 # expand domain
-Lx = 2*r2
-Ly = 2*r2
+Lx = 2.5*r2
+Ly = 2.5*r2
 
 # hyperparameters (start guesses)
 sigma_f = 1.0
@@ -44,8 +44,7 @@ sigma_n = 1.0
 
 # create a strain object
 strain_object = gp_strain.gp_strain(obs, y, pred, mx, my, Lx, Ly, nrSegs,
-                                    sigma_f, l, sigma_n, v,
-                                    covfunc=gp_strain.covfunc(covtype='matern', nu=1.5))
+                                    sigma_f, l, sigma_n, v)
 
 # optimise marginal likelihood
 strain_object.optimise_ml()
